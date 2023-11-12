@@ -2,9 +2,8 @@ defmodule EchoUdp.Service do
   use GenServer
   require Logger
 
-
   def start_link(opts) do
-    Logger.info("Starting service")
+    Logger.info("Starting service #{inspect(self())}")
     GenServer.start_link(__MODULE__, :ok, opts)
   end
 
@@ -13,20 +12,19 @@ defmodule EchoUdp.Service do
     Logger.info("Initializing service")
 
     addr =
-      case :inet.getaddr(~c'fly-global-services', :inet) do
+      case System.fetch_env("FLY_APP_NAME") do
         {:ok, _} ->
           {:ok, fly_global_ip} = :inet.getaddr(~c"fly-global-services", :inet)
           Logger.info("fly-global-services given by #{:inet.ntoa(fly_global_ip)}")
           fly_global_ip
 
-        {:error, reason} ->
-          Logger.error("Error while getting the address, #{inspect(reason)}")
+        :error ->
           {0, 0, 0, 0}
       end
 
     case :gen_udp.open(5002, [:binary, {:active, false}, {:ip, addr}]) do
       {:ok, socket} ->
-        Logger.info("Started UDP server on #{:inet.ntoa(addr)}:5002")
+        Logger.info("Started UDP server on #{:inet.ntoa(addr)}:5002, #{inspect(self())}")
         {:ok, %{socket: socket}, {:continue, :recv}}
 
       {:error, reason} ->
@@ -39,11 +37,10 @@ defmodule EchoUdp.Service do
     case :gen_udp.recv(socket, 0) do
       {:ok, {address, port, packet}} ->
         Logger.debug(
-          "Received UDP packet from #{inspect(address)}:#{inspect(port)}: #{inspect(packet)}"
+          "Received UDP packet from #{inspect(address)}:#{inspect(port)}: #{inspect(packet)}, #{inspect(self())}"
         )
 
         :gen_udp.send(state.socket, address, port, "ACK: #{inspect(packet)}")
-
         {:noreply, state, {:continue, :recv}}
 
       {:error, reason} ->
